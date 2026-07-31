@@ -10,7 +10,7 @@ message = input("insert msg: ")
 
 
 # Create a chat completion
-while True():
+while True:
     messages=[
     {
         "role":"system",
@@ -27,6 +27,12 @@ while True():
     messages=messages
     )
 
+
+    from rich.console import Console
+    from rich.markdown import Markdown
+    console = Console()
+
     # Print the model's response
-    print(completion.choices[0].message.content)
+    before_mdtxt= completion.choices[0].message.content
+    console.print(Markdown(before_mdtxt))
     message = input("insert msg: ")
