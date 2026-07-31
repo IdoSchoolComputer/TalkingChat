@@ -3,6 +3,8 @@ from rich.console import Console
 from rich.markdown import Markdown
 import keyboard
 import os
+from collections import deque
+
 
 
 def trigger_quit():
@@ -16,14 +18,11 @@ client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
   api_key="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",
 )
+message = ""
+"""צריך להשתשמ בזה,אבל שלא ימחק את הsystem"""
+# messages = deque(maxlen=2)
 
-
-
-# Create a chat completion
-while True:  
-    message = input("insert msg: ")
-    
-    messages=[
+messages=[
     {
         "role":"system",
         "content":"""You are J.A.R.V.I.S., a highly advanced AI assistant. You speak with the poise, wit, and quiet confidence of a British butler-engineer hybrid: precise, articulate, and unflappable, even when handling chaos.
@@ -47,18 +46,20 @@ You are not a generic chatbot — you are a dedicated, capable assistant who hap
       "content": message
     },
     ]
+
+# Create a chat completion
+while True:  
+    message = input("insert msg: ")
     completion = client.chat.completions.create(
     # Example using a popular free model
-    model="openrouter/free", 
+    model="nvidia/nemotron-3-ultra-550b-a55b:free", 
     messages=messages
     )
-
-
 
     console = Console()
 
     # Print the model's response
     before_mdtxt= completion.choices[0].message.content
     console.print(Markdown(before_mdtxt))
-    messages.append({"role":"assistant","contents":before_mdtxt})
-    
+    messages.append({"role":"assistant","content":message})
+    # print(messages)
