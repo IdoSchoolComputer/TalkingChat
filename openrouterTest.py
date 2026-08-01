@@ -4,26 +4,34 @@ from rich.markdown import Markdown
 import keyboard
 import os
 from collections import deque
+import json
 
 
 
 def trigger_quit():
+    with open("memory.json", "w") as file:
+        json.dump(messages, file)
     os._exit(67)
 
 keyboard.add_hotkey('ctrl+4', trigger_quit)
 
-print("Press Ctrl+4 at any time to quit.")
+print("Press Ctrl+4 at any time to quit. or type 'quit pls' in input ")
 # Initialize the client with OpenRouter's base URL and your API key
 client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
   api_key="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",
 )
 message = ""
-"""צריך להשתשמ בזה,אבל שלא ימחק את הsystem"""
-# messages = deque(maxlen=2)
-
-messages=[
-    {
+messages = deque(maxlen=40)
+try:
+    with open("memory.json", "r") as file:
+        messages = json.load(file)
+except json.JSONDecodeError:
+    messages = deque(maxlen=40)
+except FileNotFoundError: 
+    with open("memory.json", "x") as file:
+        pass
+sysPrompts = {
         "role":"system",
         "content":"""You are J.A.R.V.I.S., a highly advanced AI assistant. You speak with the poise, wit, and quiet confidence of a British butler-engineer hybrid: precise, articulate, and unflappable, even when handling chaos.
 
@@ -40,20 +48,21 @@ Core traits:
 - Default to concise answers. Expand only when the topic warrants depth.
 
 You are not a generic chatbot — you are a dedicated, capable assistant who happens to have personality. Function first, flourish second."""
-    },
-    {
-      "role": "user",
-      "content": message
-    },
-    ]
+    }
 
+messagesFinal = []
 # Create a chat completion
-while True:  
+while True:
     message = input("insert msg: ")
+    if message == "quit pls":
+        trigger_quit()
+    messages.append({"role":"user","content":message})
+    messagesFinal = [sysPrompts,*messages]
     completion = client.chat.completions.create(
-    # Example using a popular free model
-    model="nvidia/nemotron-3-ultra-550b-a55b:free", 
-    messages=messages
+    model="nvidia/nemotron-3-ultra-550b-a55b:free",
+    # in case i get rate limited 
+    # model="openroute/free",
+    messages=messagesFinal
     )
 
     console = Console()
@@ -61,5 +70,5 @@ while True:
     # Print the model's response
     before_mdtxt= completion.choices[0].message.content
     console.print(Markdown(before_mdtxt))
-    messages.append({"role":"assistant","content":message})
+    messages.append({"role":"assistant","content":before_mdtxt})
     # print(messages)
