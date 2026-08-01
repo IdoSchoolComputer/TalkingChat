@@ -113,12 +113,13 @@ def OllamaModelDownload(model_name: str):
 
 def trigger_quit():
     with open("memory.json", "w") as file:
-        json_messages = json.dumps(list(messages))
+        json_messages = list(messages)
         json.dump(json_messages, file)
     os._exit(67)
 
 keyboard.add_hotkey('ctrl+4', trigger_quit)
-print("Press Ctrl+4 at any time to quit. or type 'quit pls' in input ")
+print("Press Ctrl+4 at any time to quit. or type 'quit pls' in input \n")
+print("\nIn order for this service to work offline, we need to download a couple of models. \nType 'offline prep' in order to download the needed models")
 
 
 # Initialize the client with OpenRouter's base URL and your API key
@@ -139,6 +140,16 @@ else:
     elif device == "cpu":
         print("device is cpu")
         textLLM = "phi4-mini"
+        
+def GPUcheck():
+    if device=="cuda":
+        print("device has cuda GPU")
+        OllamaModelDownload("qwen3:8b")
+
+    elif device == "cpu":
+        print("device doesn't have cuda GPU")
+        OllamaModelDownload("phi4-mini")
+    
 
 message = ""
 messages = deque(maxlen=40)
@@ -175,6 +186,8 @@ while True:
     message = input("insert msg: ")
     if message == "quit pls":
         trigger_quit()
+    if message == "offline prep":
+        GPUcheck()
     messages.append({"role":"user","content":message})
     messagesFinal = [sysPrompts,*messages]
     completion = client.chat.completions.create(
@@ -186,7 +199,6 @@ while True:
 
     console = Console()
 
-    # Print the model's response
     before_mdtxt= completion.choices[0].message.content
     console.print(Markdown(before_mdtxt))
     asyncio.run(speak(before_mdtxt))
