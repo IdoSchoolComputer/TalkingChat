@@ -10,17 +10,38 @@ import torch
 import edge_tts
 from playsound3 import playsound
 import asyncio
+import socket
+import pyttsx3
+
+def check_internet(host="8.8.8.8", port=53, timeout=3):
+    """
+    Returns True if internet is available, False otherwise.
+    8.8.8.8 is Google's public DNS server.
+    Port 53 is the standard port for DNS traffic.
+    """
+    try:
+        # Create a socket connection
+        socket.setdefaulttimeout(timeout)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        return True
+    except OSError:
+        return False
 
 device = "cuda" if torch.cuda.is_available() else "cpu" 
 
 async def speak(content:str):
-    # Uses the highly realistic 'Brian' neural voice
-    communicate = edge_tts.Communicate(content, "en-US-BrianMultilingualNeural")
-    await communicate.save("output.mp3")
-    playsound("output.mp3")
-    os.remove("output.mp3")
-
-
+    if check_internet:
+        # Uses the highly realistic 'Brian' neural voice
+        communicate = edge_tts.Communicate(content, "en-US-BrianMultilingualNeural")
+        await communicate.save("output.mp3")
+        playsound("output.mp3")
+        os.remove("output.mp3")
+    elif not check_internet:
+        engine = pyttsx3.init()
+        # Plays directly out of your speakers without saving a file
+        engine.say(content)
+        engine.runAndWait()
+"""need to add ollama, for when theres no intenet"""
 def trigger_quit():
     with open("memory.json", "w") as file:
         json.dump(messages, file)
