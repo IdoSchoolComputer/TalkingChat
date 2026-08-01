@@ -311,7 +311,7 @@ def record_and_transcribe(speak,HebrewModel,quit):
     if is_hebrew:
         # Hebrew: re-transcribe locally with ivrit-ai for better accuracy.
         print("Hebrew detected - handing off to the local ivrit model...")
-        transcribe_local_hebrew(audio,HebrewModel)
+        return transcribe_local_hebrew(audio,HebrewModel)
     elif detected_lang.startswith('en'):
         # Anything else: Groq's own transcript is already good, so just use it -
         # no need to spin up the local model at all.
