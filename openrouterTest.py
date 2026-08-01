@@ -16,6 +16,7 @@ pygame.mixer.init()
 import subprocess
 import sys
 import shutil
+import time
 
 def check_internet(host="8.8.8.8", port=53, timeout=3):
     """
@@ -34,14 +35,14 @@ def check_internet(host="8.8.8.8", port=53, timeout=3):
 device = "cuda" if torch.cuda.is_available() else "cpu" 
 
 async def speak(content:str):
-    if check_internet:
+    if check_internet():
         # Uses the highly realistic 'Brian' neural voice
         communicate = edge_tts.Communicate(content, "en-US-BrianMultilingualNeural")
         await communicate.save("output.mp3")
         words = pygame.mixer.Sound("output.mp3")
         words.play()
         os.remove("output.mp3")
-    elif not check_internet:
+    elif not check_internet():
         engine = pyttsx3.init()
         # Plays directly out of your speakers without saving a file
         engine.say(content)
@@ -104,7 +105,7 @@ print("\nIn order for this service to work offline, we need to download a couple
 
 
 # Initialize the client with OpenRouter's base URL and your API key
-if check_internet:
+if check_internet():
     client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key="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",
@@ -164,15 +165,19 @@ You are not a generic chatbot — you are a dedicated, capable assistant who hap
     }
 
 messagesFinal = []
+
+def to_api_messages(msgs):
+    return [{"role": m["role"], "content": m["content"]} for m in msgs]
 # Create a chat completion
 while True:
+    now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     message = input("insert msg: ")
     if message == "quit pls":
         trigger_quit()
     if message == "offline prep":
         GPUcheck()
-    messages.append({"role":"user","content":message})
-    messagesFinal = [sysPrompts,*messages]
+    messages.append({"role":"user","content":now+" "+message,"time":now})
+    messagesFinal = [sysPrompts, *to_api_messages(messages)]
     completion = client.chat.completions.create(
     model=textLLM,
     # in case i get rate limited 
@@ -186,5 +191,5 @@ while True:
     console.print(Markdown(before_mdtxt))
     asyncio.run(speak(before_mdtxt))
 
-    messages.append({"role":"assistant","content":before_mdtxt})
+    messages.append({"role":"assistant","content":now+" "+before_mdtxt,"time":now})
     # print(messages)
