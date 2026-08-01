@@ -5,7 +5,20 @@ import keyboard
 import os
 from collections import deque
 import json
+import numpy as np
+import torch
+import edge_tts
+from playsound3 import playsound
+import asyncio
 
+device = "cuda" if torch.cuda.is_available() else "cpu" 
+
+async def speak(content:str):
+    # Uses the highly realistic 'Brian' neural voice
+    communicate = edge_tts.Communicate(content, "en-US-BrianMultilingualNeural")
+    await communicate.save("output.mp3")
+    playsound("output.mp3")
+    os.remove("output.mp3")
 
 
 def trigger_quit():
@@ -70,5 +83,7 @@ while True:
     # Print the model's response
     before_mdtxt= completion.choices[0].message.content
     console.print(Markdown(before_mdtxt))
+    asyncio.run(speak(before_mdtxt))
+
     messages.append({"role":"assistant","content":before_mdtxt})
     # print(messages)
