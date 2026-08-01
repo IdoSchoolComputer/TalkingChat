@@ -17,6 +17,7 @@ import subprocess
 import sys
 import shutil
 import time
+from ttsTest import record_and_transcribe,load_local_model;
 
 def check_internet(host="8.8.8.8", port=53, timeout=3):
     """
@@ -40,14 +41,15 @@ async def speak(content:str):
         communicate = edge_tts.Communicate(content, "en-US-BrianMultilingualNeural")
         await communicate.save("output.mp3")
         words = pygame.mixer.Sound("output.mp3")
-        words.play()
+        channel = words.play()
+        while channel.get_busy():
+            await asyncio.sleep(0.1)
         os.remove("output.mp3")
     elif not check_internet():
         engine = pyttsx3.init()
         # Plays directly out of your speakers without saving a file
         engine.say(content)
         engine.runAndWait()
-"""need to add ollama, for when theres no intenet"""
 
 def OllamaModelDownload(model_name: str):
     # --- STEP 0: LOCATE THE OLLAMA EXECUTABLE DIRECTLY ---
@@ -169,9 +171,10 @@ messagesFinal = []
 def to_api_messages(msgs):
     return [{"role": m["role"], "content": m["content"]} for m in msgs]
 # Create a chat completion
+HebrewModel = load_local_model()
 while True:
     now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    message = input("insert msg: ")
+    message = record_and_transcribe(speak,HebrewModel,trigger_quit)
     if message == "quit pls":
         trigger_quit()
     if message == "offline prep":
@@ -190,6 +193,7 @@ while True:
     before_mdtxt= completion.choices[0].message.content
     console.print(Markdown(before_mdtxt))
     asyncio.run(speak(before_mdtxt))
+    
 
     messages.append({"role":"assistant","content":now+" "+before_mdtxt,"time":now})
     # print(messages)

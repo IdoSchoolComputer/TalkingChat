@@ -5,6 +5,29 @@ import queue
 import numpy as np
 import sounddevice as sd
 from tqdm import tqdm
+from pathlib import Path
+import asyncio
+
+try:
+    import torch
+    _HAS_TORCH = True
+except ImportError:
+    # torch not installed - faster-whisper can still run on CPU without it,
+    # we just can't check for a GPU, so assume there isn't one.
+    torch = None
+    _HAS_TORCH = False
+
+from groq import Groq
+from faster_whisper import WhisperModel
+
+try:
+    from bidi.algorithm import get_display
+    _HAS_BIDI = True
+except ImportError:
+    # python-bidi isn't installed - just print the raw string. It'll look
+    # reversed/garbled in some terminals, but the script still runs.
+    get_display = None
+    _HAS_BIDI = False
 
 # ---------------------------------------------------------------------------
 # CONFIG
@@ -33,22 +56,18 @@ MIN_VOICED_FRACTION = 0.02
 # stop before anyone said anything.
 SILENCE_STOP_DURATION = 2.0
 
-# ---------------------------------------------------------------------------
-# Optional: fix RTL Hebrew text for terminal display only.
-# Don't apply this if you're writing to docx/PDF later - those already
-# handle bidi text correctly on their own.
-# ---------------------------------------------------------------------------
-try:
-    from bidi.algorithm import get_display
-    def fix_rtl(text):
+
+def fix_rtl(text):
+    """
+    Fix RTL Hebrew text for terminal display only.
+    Don't apply this if you're writing to docx/PDF later - those already
+    handle bidi text correctly on their own.
+    """
+    if _HAS_BIDI:
         # Reorders Hebrew/Arabic characters so they display right-to-left
         # in terminals that don't handle bidi text themselves.
         return get_display(text)
-except ImportError:
-    # python-bidi isn't installed - just print the raw string. It'll look
-    # reversed/garbled in some terminals, but the script still runs.
-    def fix_rtl(text):
-        return text
+    return text
 
 
 def is_silent(audio_int16, rms_threshold=SILENCE_RMS_THRESHOLD,
@@ -182,8 +201,6 @@ def detect_language_via_groq(audio_int16):
 
     Returns (is_hebrew: bool, groq_text: str, detected_lang: str)
     """
-    from groq import Groq
-
     if not GROQ_API_KEY or GROQ_API_KEY == "not telling u":
         raise ValueError("Set GROQ_API_KEY at the top of the script.")
 
@@ -213,17 +230,9 @@ def load_local_model():
     Load the local ivrit-ai model. Uses CUDA + float16 if a GPU is
     available (much faster), otherwise falls back to CPU + int8.
     """
-    from faster_whisper import WhisperModel
-
     print(f"Loading local model: {LOCAL_MODEL} ...")
 
-    try:
-        import torch
-        has_cuda = torch.cuda.is_available()
-    except ImportError:
-        # torch not installed - faster-whisper can still run on CPU without it,
-        # we just can't check for a GPU, so assume there isn't one.
-        has_cuda = False
+    has_cuda = _HAS_TORCH and torch.cuda.is_available()
 
     if has_cuda:
         # float16 needs a GPU - much faster than int8 on CPU for a model this size.
@@ -237,20 +246,19 @@ def load_local_model():
     return model
 
 
-def transcribe_local_hebrew(audio_int16):
+def transcribe_local_hebrew(audio_int16,HebrewModel):
     """
     Transcribe Hebrew audio using the local ivrit-ai model.
     Language is already known (Groq told us it's Hebrew), so we skip
     local language detection entirely and go straight to transcription -
     this alone saves a full extra pass over the audio.
     """
-    model = load_local_model()
 
     # faster-whisper expects float32 samples in [-1, 1], not raw int16.
     audio_float = audio_int16.astype(np.float32) / 32768.0
     duration = len(audio_int16) / SAMPLE_RATE
 
-    segments, info = model.transcribe(
+    segments, info = HebrewModel.transcribe(
         audio_float,
         language="he",            # skip auto-detect - we already know it's Hebrew
         beam_size=5,               # wider beam search = more accurate, a bit slower
@@ -260,14 +268,13 @@ def transcribe_local_hebrew(audio_int16):
     # `segments` is a lazy generator - nothing has actually run yet, the model
     # only processes audio as we iterate over it below.
 
-    lines = []
+    output = ""
     last_end = 0.0
     # Progress bar tracked against audio duration (in seconds), not segment
     # count, since we don't know how many segments there'll be up front.
     with tqdm(total=round(duration, 1), unit="s", desc="Transcribing (ivrit)") as pbar:
         for segment in segments:
-            text = fix_rtl(segment.text)
-            lines.append(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {text}")
+            output = ""+segment.text
             # Advance the bar by however much audio this segment covered.
             pbar.update(round(segment.end - last_end, 1))
             last_end = segment.end
@@ -276,43 +283,41 @@ def transcribe_local_hebrew(audio_int16):
             # top it off so it always finishes at 100%.
             pbar.update(round(duration - last_end, 1))
 
-    if not lines:
+    if not output:
         # vad_filter=True can legitimately strip an entire clip if it was
         # all silence/noise that our earlier is_silent() check let through
         # (e.g. RMS was borderline). Say so instead of printing nothing.
-        print("No speech detected in audio.")
-        return
+        return "No speech detected in audio."
 
     # Printed after the progress bar finishes so lines don't interleave with it.
-    for line in lines:
-        print(line)
+    print(fix_rtl(output))
+    return output
 
 
-def main():
+def record_and_transcribe(speak,HebrewModel,quit):
     audio = record_audio()
     if audio is None:
-        print("No audio captured.")
-        return
+        return "No audio captured. Hence no input captured"
+        
 
     if is_silent(audio):
         # Bail out before spending an API call on a clip that's just silence.
-        print("Recording is silent - nothing to transcribe. Exiting.")
-        return
+        asyncio.run(speak("Recording is silent - nothing to transcribe. Exiting."))
+        quit()
+        
 
     is_hebrew, groq_text, detected_lang = detect_language_via_groq(audio)
 
     if is_hebrew:
         # Hebrew: re-transcribe locally with ivrit-ai for better accuracy.
         print("Hebrew detected - handing off to the local ivrit model...")
-        transcribe_local_hebrew(audio)
+        transcribe_local_hebrew(audio,HebrewModel)
     elif detected_lang.startswith('en'):
         # Anything else: Groq's own transcript is already good, so just use it -
         # no need to spin up the local model at all.
-        print(f"English detected - using Groq's transcript directly.")
-        print(groq_text)
+        print("English detected - using Groq's transcript directly.")
+        return groq_text
     else:
-        print('Not English or Hebrew, stopping program...')
-
-
-if __name__ == "__main__":
-    main()
+        asyncio.run(speak('Not English or Hebrew, stopping program...'))
+        quit()
+        
