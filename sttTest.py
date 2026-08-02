@@ -8,6 +8,11 @@ from tqdm import tqdm
 from pathlib import Path
 import asyncio
 from translation import translate
+import keyboard
+
+DidNezifa = False
+ReadyForRecording=False
+
 
 try:
     import torch
@@ -102,30 +107,21 @@ def is_silent(audio_int16, rms_threshold=SILENCE_RMS_THRESHOLD,
 
 
 def record_audio():
-    """
-    Record from mic until either:
-      - the user has spoken and then gone quiet for SILENCE_STOP_DURATION
-        seconds (auto-stop), or
-      - the user hits Ctrl+C (manual stop, still works at any point).
-    Returns int16 mono audio at 16kHz.
-    """
-    # sounddevice records on a background thread and hands us chunks via
-    # this callback - we can't just "return" from it, so we push each
-    # chunk onto a thread-safe queue and drain that queue on the main thread.
-    audio_queue = queue.Queue()
-
-    def callback(indata, frames, time, status):
-        audio_queue.put(indata.copy())  # .copy() - sounddevice reuses this buffer internally
+    print("Press Enter to start recording...")
+    keyboard.wait('enter')  # blocks here until Enter is pressed
 
     print(f"Recording... speak now. Stops automatically after "
           f"{SILENCE_STOP_DURATION:.1f}s of silence (or press Ctrl+C).")
+
     buffer = []
+    audio_queue = queue.Queue()
+
+    def callback(indata, frames, time, status):
+        audio_queue.put(indata.copy())
+
     stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype='int16', callback=callback)
     stream.start()
 
-    # We don't start counting silence until the user has actually said
-    # something - otherwise it'd auto-stop immediately, before they even
-    # got a word out, since the mic starts out silent by definition.
     has_spoken = False
     silence_duration = 0.0
 
@@ -133,43 +129,32 @@ def record_audio():
         while True:
             chunk = audio_queue.get()
             buffer.append(chunk)
-
-            # Per-chunk RMS on the normalized signal, same measure is_silent()
-            # uses on the full clip - keeps the two silence checks consistent.
             chunk_float = chunk.flatten().astype(np.float32) / 32768.0
             chunk_rms = np.sqrt(np.mean(chunk_float ** 2))
             chunk_duration = len(chunk_float) / SAMPLE_RATE
 
             if chunk_rms > SILENCE_RMS_THRESHOLD:
                 has_spoken = True
-                silence_duration = 0.0  # any voiced chunk resets the silence clock
+                silence_duration = 0.0
             elif has_spoken:
                 silence_duration += chunk_duration
                 if silence_duration >= SILENCE_STOP_DURATION:
-                    print(f"\n{SILENCE_STOP_DURATION:.1f}s of silence detected - "
-                          "stopping recording.")
+                    print(f"\n{SILENCE_STOP_DURATION:.1f}s of silence detected - stopping recording.")
                     break
-            # else: still silent and nobody has spoken yet - keep waiting,
-            # don't count this toward the silence timer.
     except KeyboardInterrupt:
         print("\nStopped recording.")
     finally:
-        # Always stop/close the stream, even if something above threw.
         stream.stop()
         stream.close()
 
     if not buffer:
-        return None  # user hit Ctrl+C before any audio came in
+        return None
 
-    # Each item in `buffer` is a small (N, 1) chunk - stack them into one
-    # long array, then flatten from (samples, 1) to a flat (samples,) array.
     audio_int16 = np.concatenate(buffer, axis=0).flatten()
     duration = len(audio_int16) / SAMPLE_RATE
     print(f"Captured {duration:.1f}s of audio.")
 
     if is_silent(audio_int16):
-        # Frame-based RMS check - catches "wrong/muted mic" and "recorded
-        # dead air" cases that a single peak-amplitude check can miss.
         print("Warning: recording appears to be silence - check your mic input.")
 
     return audio_int16
@@ -293,7 +278,7 @@ def transcribe_local_hebrew(audio_int16,HebrewModel):
     return output
 
 
-def record_and_transcribe(speak,HebrewModel,quit):
+def record_and_transcribe(speak,HebrewModel,quit,client):
     audio = record_audio()
     if audio is None:
         return "No audio captured. Hence no input captured"

@@ -17,7 +17,7 @@ import subprocess
 import sys
 import shutil
 import time
-from ttsTest import record_and_transcribe,load_local_model
+from sttTest import record_and_transcribe,load_local_model
 
 
 def check_internet(host="8.8.8.8", port=53, timeout=3):
@@ -115,6 +115,8 @@ if check_internet():
     )
     textLLM = "nvidia/nemotron-3-ultra-550b-a55b:free"
 else:
+    warningOffline = pygame.mixer.Sound("offlineWarning.mp3")
+    warningOffline.play()
     client = OpenAI(
         base_url="http://localhost:11434/v1",
         api_key="ollama",
@@ -175,7 +177,7 @@ def to_api_messages(msgs):
 HebrewModel = load_local_model()
 while True:
     now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    message = record_and_transcribe(speak,HebrewModel,trigger_quit)
+    message = record_and_transcribe(speak,HebrewModel,trigger_quit,client)
     if message == "quit pls":
         trigger_quit()
     if message == "offline prep":
