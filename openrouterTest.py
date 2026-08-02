@@ -18,7 +18,11 @@ import sys
 import shutil
 import time
 from sttTest import record_and_transcribe,load_local_model
+from translation import translate
+import argostranslate.package
+import argostranslate.translate
 
+isHebrew = False
 
 def check_internet(host="8.8.8.8", port=53, timeout=3):
     """
@@ -36,8 +40,10 @@ def check_internet(host="8.8.8.8", port=53, timeout=3):
 
 device = "cuda" if torch.cuda.is_available() else "cpu" 
 
-async def speak(content:str):
+async def speak(content:str,isHebrew:bool):
     if check_internet():
+        if isHebrew:
+            content=translate(content,client,"Hebrew with Nikod")
         # Uses the highly realistic 'Brian' neural voice
         communicate = edge_tts.Communicate(content, "en-US-BrianMultilingualNeural")
         await communicate.save("output.mp3")
@@ -47,6 +53,8 @@ async def speak(content:str):
             await asyncio.sleep(0.1)
         os.remove("output.mp3")
     elif not check_internet():
+        if isHebrew:
+            content = argostranslate.translate.translate(content, "en", "he")
         engine = pyttsx3.init()
         # Plays directly out of your speakers without saving a file
         engine.say(content)
@@ -103,8 +111,8 @@ def trigger_quit():
     os._exit(67)
 
 keyboard.add_hotkey('ctrl+4', trigger_quit)
-print("Press Ctrl+4 at any time to quit. or type 'quit pls' in input \n")
-print("\nIn order for this service to work offline, we need to download a couple of models. \nType 'offline prep' in order to download the needed models")
+print("\nPress Ctrl+4 at any time to quit. or say 'stop program' in input ")
+print("\nIn order for this service to work offline, we need to download a couple of models. \nSay 'offline prepare' in order to download the needed models\n")
 
 
 # Initialize the client with OpenRouter's base URL and your API key
@@ -129,6 +137,23 @@ else:
         textLLM = "phi4-mini"
         
 def GPUcheck():
+    installed_packages = argostranslate.package.get_installed_packages()
+    is_installed = any(
+        pkg.from_code == "en" and pkg.to_code == "he" 
+        for pkg in installed_packages
+    )
+
+    if not is_installed:
+        # Only run the download/install block if missing
+        argostranslate.package.update_package_index()
+        available_packages = argostranslate.package.get_available_packages()
+        package_to_install = next(
+            filter(lambda x: x.from_code == "en" and x.to_code == "he", available_packages)
+        )
+        argostranslate.package.install_from_path(package_to_install.download())
+        print("Argotranslate Package installed successfully.")
+    else:
+        print("Argotranslate Package already installed. Skipping.")
     if device=="cuda":
         print("device has cuda GPU")
         OllamaModelDownload("qwen3:8b")
@@ -177,10 +202,10 @@ def to_api_messages(msgs):
 HebrewModel = load_local_model()
 while True:
     now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    message = record_and_transcribe(speak,HebrewModel,trigger_quit,client)
-    if message == "quit pls":
+    message,isHebrew = record_and_transcribe(speak,HebrewModel,trigger_quit,client,isHebrew)
+    if message == "stop program":
         trigger_quit()
-    if message == "offline prep":
+    if message == "offline prepare":
         GPUcheck()
     messages.append({"role":"user","content":now+" "+message,"time":now})
     messagesFinal = [sysPrompts, *to_api_messages(messages)]
@@ -195,7 +220,7 @@ while True:
 
     before_mdtxt= completion.choices[0].message.content
     console.print(Markdown(before_mdtxt))
-    asyncio.run(speak(before_mdtxt))
+    asyncio.run(speak(before_mdtxt,isHebrew))
     
 
     messages.append({"role":"assistant","content":now+" "+before_mdtxt,"time":now})

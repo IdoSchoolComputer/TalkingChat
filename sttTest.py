@@ -278,30 +278,35 @@ def transcribe_local_hebrew(audio_int16,HebrewModel):
     return output
 
 
-def record_and_transcribe(speak,HebrewModel,quit,client):
+def record_and_transcribe(speak,HebrewModel,quit,client,isHebrew):
     audio = record_audio()
     if audio is None:
-        return "No audio captured. Hence no input captured"
-        
+        asyncio.run(speak("No audio captured. Hence no input captured. Trying Again..."))
+        record_and_transcribe()
+
 
     if is_silent(audio):
         # Bail out before spending an API call on a clip that's just silence.
         asyncio.run(speak("Recording is silent - nothing to transcribe. Exiting."))
         quit()
-        
+        return "",False
+
 
     is_hebrew, groq_text, detected_lang = detect_language_via_groq(audio)
 
     if is_hebrew:
+        isHebrew = True
         # Hebrew: re-transcribe locally with ivrit-ai for better accuracy.
         print("Hebrew detected - handing off to the local ivrit model...")
-        return translate(transcribe_local_hebrew(audio,HebrewModel),client,"English")
+        return translate(transcribe_local_hebrew(audio,HebrewModel),client,"English"),isHebrew
     elif detected_lang.startswith('en'):
+        isHebrew=False
         # Anything else: Groq's own transcript is already good, so just use it -
         # no need to spin up the local model at all.
         print("English detected - using Groq's transcript directly.")
-        return groq_text
+        return groq_text,isHebrew
     else:
         asyncio.run(speak('Not English or Hebrew, stopping program...'))
         quit()
-        
+        return "",False
+

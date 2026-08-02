@@ -2,7 +2,7 @@
 
 ###### updated for 1/8/26
 
-* [x] translation for hebrew input
+* [x] ~~translation for hebrew input~~
 
 * [ ] translation for hebrew output
 
