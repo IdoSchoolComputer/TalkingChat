@@ -111,7 +111,7 @@ def trigger_quit():
     os._exit(67)
 
 keyboard.add_hotkey('ctrl+4', trigger_quit)
-print("\nPress Ctrl+4 at any time to quit. or say 'stop program' in input ")
+print("\nPress Ctrl+4 at any time to quit. or say 'stop program'")
 print("\nIn order for this service to work offline, we need to download a couple of models. \nSay 'offline prepare' in order to download the needed models\n")
 
 
@@ -199,13 +199,13 @@ messagesFinal = []
 def to_api_messages(msgs):
     return [{"role": m["role"], "content": m["content"]} for m in msgs]
 # Create a chat completion
-HebrewModel = load_local_model()
+HebrewModel = None
 while True:
     now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     message,isHebrew = record_and_transcribe(speak,HebrewModel,trigger_quit,client,isHebrew)
     if message == "stop program":
         trigger_quit()
-    if message == "offline prepare":
+    if message == "offline preparation":
         GPUcheck()
     messages.append({"role":"user","content":now+" "+message,"time":now})
     messagesFinal = [sysPrompts, *to_api_messages(messages)]
