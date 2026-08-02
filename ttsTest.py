@@ -1,7 +1,7 @@
 import io
 import wave
 import queue
-
+import os
 import numpy as np
 import sounddevice as sd
 from tqdm import tqdm
@@ -32,7 +32,9 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # CONFIG
 # ---------------------------------------------------------------------------
-GROQ_API_KEY = "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"          # required - used for language detection + English transcription
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")          # required - used for language detection + English transcription
+if not GROQ_API_KEY:
+    raise ValueError("API key not found in environment variables")
 GROQ_MODEL = "whisper-large-v3-turbo"   # fast Groq model, used for detection + non-Hebrew transcription
 LOCAL_MODEL = "ivrit-ai/whisper-large-v3-turbo-ct2"  # ivrit-ai's fastest Hebrew fine-tune (turbo)
 SAMPLE_RATE = 16000
