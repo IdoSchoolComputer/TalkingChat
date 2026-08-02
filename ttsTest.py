@@ -7,6 +7,7 @@ import sounddevice as sd
 from tqdm import tqdm
 from pathlib import Path
 import asyncio
+from translation import translate
 
 try:
     import torch
@@ -38,10 +39,6 @@ if not GROQ_API_KEY:
 GROQ_MODEL = "whisper-large-v3-turbo"   # fast Groq model, used for detection + non-Hebrew transcription
 LOCAL_MODEL = "ivrit-ai/whisper-large-v3-turbo-ct2"  # ivrit-ai's fastest Hebrew fine-tune (turbo)
 SAMPLE_RATE = 16000
-
-# Languages that need right-to-left display fixing in the terminal.
-# (Whisper/Groq return ISO 639-1 codes like "he", "ar" for these.)
-RTL_LANGUAGES = {"he", "ar", "fa", "ur"}
 
 # --- Silence detection ------------------------------------------------------
 # RMS is measured on the normalized [-1, 1] float signal, so this threshold
@@ -313,7 +310,7 @@ def record_and_transcribe(speak,HebrewModel,quit):
     if is_hebrew:
         # Hebrew: re-transcribe locally with ivrit-ai for better accuracy.
         print("Hebrew detected - handing off to the local ivrit model...")
-        return transcribe_local_hebrew(audio,HebrewModel)
+        return translate(transcribe_local_hebrew(audio,HebrewModel),client,"English")
     elif detected_lang.startswith('en'):
         # Anything else: Groq's own transcript is already good, so just use it -
         # no need to spin up the local model at all.
