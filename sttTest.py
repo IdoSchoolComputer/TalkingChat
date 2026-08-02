@@ -61,6 +61,7 @@ MIN_VOICED_FRACTION = 0.02
 SILENCE_STOP_DURATION = 2.0
 
 
+
 def fix_rtl(text):
     """
     Fix RTL Hebrew text for terminal display only.
